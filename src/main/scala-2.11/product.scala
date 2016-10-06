@@ -27,7 +27,7 @@ object product extends App {
     "brand"
     //"fastseller",
     //"channel", //mobile_web,mobile,web karisiklik yapiyor.
-    ).agg(count("merchantid").as("numberOfViews"),
+  ).agg(count("merchantid").as("numberOfViews"),
     avg("scorefive").as("scorefive"),
     avg("scorefour").as("scorefour"),
     avg("scorethree").as("scorethree"),
@@ -40,7 +40,7 @@ object product extends App {
   //println(groupedViewDataFrame.count())
 
   var productDataFrame = orderDataFrame.join(groupedViewDataFrame,
-   ( orderDataFrame(orderDataFrame("productid").toString()) === groupedViewDataFrame(groupedViewDataFrame("productid").toString()))
+     orderDataFrame(orderDataFrame("productid").toString()) === groupedViewDataFrame(groupedViewDataFrame("productid").toString())
     ,"left").select(orderDataFrame("productid"),
     orderDataFrame("year"),
     orderDataFrame("month"),
@@ -66,11 +66,11 @@ object product extends App {
     groupedViewDataFrame("brand")
   )
 
- //11559 instances
+  //11559 instances
   //println(productDataFrame.count())
 
- // productDataFrame = productDataFrame.na.replace(Array("brand","fastseller"),Map(""->"NULL"))
-//  productDataFrame = productDataFrame.na.replace(Array("productid","sellerid"),Map(""->"-999"))
+  // productDataFrame = productDataFrame.na.replace(Array("brand","fastseller"),Map(""->"NULL"))
+  //  productDataFrame = productDataFrame.na.replace(Array("productid","sellerid"),Map(""->"-999"))
 
   productDataFrame = productDataFrame.na.fill(-999.0)
   productDataFrame = productDataFrame.na.fill("NULL")
@@ -80,8 +80,8 @@ object product extends App {
 
 
   var newOrderDf = productDataFrame.select("productid","sellerid","year","month","week","day","disprice","brand",
-  "finalprice","price", "stock","scorefive","scorefour","scorethree","scoretwo","scoreone","sellergrade","numberOfViews",
-  "brandIndexed","productcount")
+    "finalprice","price", "stock","scorefive","scorefour","scorethree","scoretwo","scoreone","sellergrade","numberOfViews",
+    "brandIndexed","productcount")
 
   //newOrderDf.select("productcount").foreach(println)
 
@@ -104,8 +104,8 @@ object product extends App {
     newOrderDf.groupBy("relativePrice","brand").agg(count("productid").as("relativeBrand"))
 
   newOrderDf = newOrderDf.join(relativeBrand,
-    ( newOrderDf(newOrderDf("relativePrice").toString()) === relativeBrand(relativeBrand("relativePrice").toString()) &&
-      newOrderDf(newOrderDf("brand").toString()) === relativeBrand(relativeBrand("brand").toString()) ),
+     newOrderDf(newOrderDf("relativePrice").toString()) === relativeBrand(relativeBrand("relativePrice").toString()) &&
+      newOrderDf(newOrderDf("brand").toString()) === relativeBrand(relativeBrand("brand").toString()),
     "left"
   ).select(
     newOrderDf("productid"),
@@ -151,100 +151,7 @@ object product extends App {
     x.getAs("stock")
     ) )
 
-    println(a.count())
-    a.saveToCassandra("dyna2","product_order")
+  println(a.count())
+  a.saveToCassandra("dyna2","product_order")
 
-
-
-  /*
-
-  val assembler = new VectorAssembler()
-    .setInputCols(Array("channelIndexed","disprice","eventcount","finalprice","price",
-      "stock","fastsellerIndexed","scorefive","scorefour","scorethree","scoretwo","scoreone","sellergrade","numberOfViews",
-      "brandIndexed"))
-    .setOutputCol("indexedFeaturesAseembler")
-
-
-  val data = assembler.transform(newOrderDf).select("productcount","indexedFeaturesAseembler")
-
-  val data2 = data.selectExpr("cast(productcount as Double) productcount","indexedFeaturesAseembler").select("productcount","indexedFeaturesAseembler")
-
-  println(data2.count())
-
-  */
-
-  //decision tree regression
-  /*
-  val featureIndexer = new VectorIndexer()
-    .setInputCol("indexedFeaturesAseembler")
-    .setOutputCol("indexedFeatures")
-    .setMaxCategories(20)
-    .fit(data2)
-
-  val Array(trainingData, testData) = data2.randomSplit(Array(0.7, 0.3))
-
-  val dt = new DecisionTreeRegressor()
-    .setLabelCol("productcount")
-    .setFeaturesCol("indexedFeatures")
-  .setMaxBins(42)
-
-
-  val pipeline = new Pipeline()
-    .setStages(Array(featureIndexer, dt))
-
-  val model = pipeline.fit(trainingData)
-
-  val predictions = model.transform(testData)
-
-  predictions.show(predictions.count().toInt)
-
-  // Select (prediction, true label) and compute test error
-  val evaluator = new RegressionEvaluator()
-    .setLabelCol("productcount")
-    .setPredictionCol("prediction")
-    .setMetricName("rmse")
-  val rmse = evaluator.evaluate(predictions)
-  println("Root Mean Squared Error (RMSE) on test data = " + rmse)
-
-  val treeModel = model.stages(1).asInstanceOf[DecisionTreeRegressionModel]
-  println("Learned regression tree model:\n" + treeModel.toDebugString)
-*/
-
-  //randomforestregression
-  /*
-  val featureIndexer = new VectorIndexer()
-    .setInputCol("indexedFeaturesAseembler")
-    .setOutputCol("indexedFeatures")
-    .setMaxCategories(20)
-    .fit(data2)
-
-  val Array(trainingData, testData) = data2.randomSplit(Array(0.7, 0.3))
-  val rf = new RandomForestRegressor()
-    .setLabelCol("productcount")
-    .setFeaturesCol("indexedFeatures")
-    .setMaxBins(42)
-
-  val pipeline = new Pipeline()
-    .setStages(Array(featureIndexer, rf))
-
-  // Train model.  This also runs the indexer.
-  val model = pipeline.fit(trainingData)
-
-  // Make predictions.
-  val predictions = model.transform(testData)
-
-  // Select example rows to display.
-  predictions.select("prediction", "productcount", "indexedFeaturesAseembler").show(100)
-
-  // Select (prediction, true label) and compute test error
-  val evaluator = new RegressionEvaluator()
-    .setLabelCol("productcount")
-    .setPredictionCol("prediction")
-    .setMetricName("rmse")
-  val rmse = evaluator.evaluate(predictions)
-  println("Root Mean Squared Error (RMSE) on test data = " + rmse)
-
-  val rfModel = model.stages(1).asInstanceOf[RandomForestRegressionModel]
-  println("Learned regression forest model:\n" + rfModel.toDebugString)
-*/
 }
