@@ -2,10 +2,10 @@ import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.feature.{VectorAssembler, VectorIndexer}
 import org.apache.spark.ml.regression.RandomForestRegressor
+import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.apache.spark.sql.cassandra.CassandraSQLContext
 import org.apache.spark.sql.functions._
 import org.apache.spark.{SparkConf, SparkContext}
-
 
 /**
   * Created by resultugay on 06-Sep-16.
@@ -54,7 +54,7 @@ object weekly extends App {
 
   val data = assembler.transform(orderDataFrame).select("label","features")
 
-  val data2 = data.selectExpr("cast(label as Double) label","features").select("label","features")
+  var data2 = data.selectExpr("cast(label as Double) label","features").select("label","features")
 
 
   //decision tree regression
@@ -114,7 +114,7 @@ object weekly extends App {
     .setOutputCol("indexedFeatures")
     .setMaxCategories(40)
     .fit(data2)
- //random splitting
+
   val Array(trainingData, testData) = data2.randomSplit(Array(0.7, 0.3))
   val rf = new RandomForestRegressor()
     .setLabelCol("label")
@@ -123,23 +123,31 @@ object weekly extends App {
   val pipeline = new Pipeline()
     .setStages(Array(featureIndexer, rf))
 
-  // Train model.  This also runs the indexer.
-  val model = pipeline.fit(trainingData)
 
-  // Make predictions.
-  val predictions = model.transform(testData)
+  val paramGrid = new ParamGridBuilder()
+    .addGrid(rf.maxDepth,Array(4,8,10))
+    //.addGrid(rf.impurity,Array("entropy","gini"))
+    .build()
 
-  // Select example rows to display.
-  //predictions.select("prediction", "label", "features").show(100)
-
-  /*   val max1 = predictions.select(max("prediction")).head().getDouble(0)
-     val min1 = predictions.select(min("prediction")).head().getDouble(0)*/
-
-  // Select (prediction, true label) and compute test error
   val evaluator = new RegressionEvaluator()
     .setLabelCol("label")
     .setPredictionCol("prediction")
     .setMetricName("rmse")
+
+
+  val cv = new CrossValidator()
+    // ml.Pipeline with ml.classification.RandomForestClassifier
+    .setEstimator(pipeline)
+    // ml.evaluation.MulticlassClassificationEvaluator
+    .setEvaluator(evaluator)
+    .setEstimatorParamMaps(paramGrid)
+    .setNumFolds(4)
+
+  val model = cv.fit(data2) // trainingData: DataFrame
+
+  val predictions = model.transform(testData)
+  predictions.select("prediction", "label", "features").show(100)
+
   val rmse = evaluator.evaluate(predictions)
   val evaluator2 = new RegressionEvaluator()
     .setLabelCol("label")
@@ -149,8 +157,34 @@ object weekly extends App {
   println("r2 on test data = " + r2)
   println("Root Mean Squared Error (RMSE) on test data = " + rmse)
 
+  //
+  /* val model = pipeline.fit(trainingData)
+
+   // Make predictions.
+   val predictions = model.transform(testData)
+
+   // Select example rows to display.
+   //predictions.select("prediction", "label", "features").show(100)
+
+/*   val max1 = predictions.select(max("prediction")).head().getDouble(0)
+   val min1 = predictions.select(min("prediction")).head().getDouble(0)*/
+
+ // Select (prediction, true label) and compute test error
+   val evaluator = new RegressionEvaluator()
+     .setLabelCol("label")
+     .setPredictionCol("prediction")
+     .setMetricName("rmse")
+   val rmse = evaluator.evaluate(predictions)
+ val evaluator2 = new RegressionEvaluator()
+   .setLabelCol("label")
+   .setPredictionCol("prediction")
+   .setMetricName("r2")
+ val r2 = evaluator2.evaluate(predictions)
+ println("r2 on test data = " + r2)
+ println("Root Mean Squared Error (RMSE) on test data = " + rmse)
 
 
+*/
 
 
   //gradient boosting
